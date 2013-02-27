@@ -1,0 +1,6 @@
+build/
+dist/
+suds.egg-info/
+*.swp
+*.bak
+*.pyc
