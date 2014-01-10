@@ -18,6 +18,7 @@
 Contains classes for basic HTTP transport implementations.
 """
 
+import ssl
 import urllib.request as u2
 import urllib.request, urllib.error
 import base64
@@ -125,7 +126,8 @@ class HttpTransport(Transport):
         @rtype: I{OpenerDirector}
         """
         if self.urlopener is None:
-            return u2.build_opener()
+            # Hack for Nimsoft Service Desk, which only seems to support TLSv1
+            return u2.build_opener(u2.HTTPSHandler(context=ssl.SSLContext(ssl.PROTOCOL_TLSv1)))
         else:
             return self.urlopener
         
