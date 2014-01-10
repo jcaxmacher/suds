@@ -19,6 +19,7 @@ The I{2nd generation} service proxy provides access to web services.
 See I{README.txt}
 """
 
+from email import message_from_string
 import suds
 import suds.metrics as metrics
 from http.cookiejar import CookieJar
@@ -637,7 +638,7 @@ class SoapClient:
             if retxml:
                 result = reply.message
             else:
-                result = self.succeeded(binding, reply.message)
+                result = self.succeeded(binding, reply.message, reply.headers)
         except TransportError as e:
             if e.httpcode in (202,204):
                 result = None
@@ -658,7 +659,7 @@ class SoapClient:
         log.debug('headers = %s', result)
         return result
     
-    def succeeded(self, binding, reply):
+    def succeeded(self, binding, reply, headers):
         """
         Request succeeded, process the reply
         @param binding: The binding to be used to process the reply.
@@ -670,6 +671,26 @@ class SoapClient:
         @raise WebFault: On server.
         """
         log.debug('http succeeded:\n%s', reply)
+        content_type = headers.get_all('Content-Type')[0]
+        if 'multipart/related' in content_type:
+            log.debug('http multipart content type: %s', content_type)
+            msg_string = ('MIME-Version: 1.0\r\n'
+                          "Content-Type: %s\r\n" % (
+                          content_type, )) 
+            msg_string += '\r\n' + reply.decode('utf-8')
+            msg = message_from_string(msg_string)
+            soapmsg = None
+            root = msg.get_param('start')
+            log.debug('multipart root: %s', root)
+            for part in msg.walk():
+                if part.get_content_maintype() == 'multipart':
+                    continue
+                if (part.get('Content-ID') and part.get('Content-ID') == root) or \
+                   (root == None and part == msg.get_payload()[0]):
+                    soapmsg = part.get_payload()
+                    continue
+            if soapmsg:
+                reply = soapmsg.encode('utf-8')
         plugins = PluginContainer(self.options.plugins)
         if len(reply) > 0:
             reply, result = binding.get_reply(self.method, reply)
